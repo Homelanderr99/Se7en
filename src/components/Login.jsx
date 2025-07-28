@@ -1,23 +1,133 @@
 import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
-import { Play, Film, Music, User, Mail } from 'lucide-react'
+import { LogIn, User, Instagram, Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { authService, supabaseUtils } from '../services/supabaseService'
+import { contentImageService } from '../services/contentImageService'
 
 const Login = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false)
   const [carouselOffset, setCarouselOffset] = useState(0)
+  const [carouselCovers, setCarouselCovers] = useState([])
+  const [showEmailLogin, setShowEmailLogin] = useState(false)
+  const [showRegister, setShowRegister] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+    name: ''
+  })
+  const [authError, setAuthError] = useState('')
+  const [isSupabaseConfigured, setIsSupabaseConfigured] = useState(false)
+
+  // Verificar configuración de Supabase al cargar
+  useEffect(() => {
+    setIsSupabaseConfigured(supabaseUtils.isConfigured())
+  }, [])
+
+  const handleInputChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    })
+    setAuthError('')
+  }
+
+  const handleEmailAuth = async (e) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setAuthError('')
+
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase no está configurado. Usando modo invitado.')
+      }
+
+      let result
+      if (showRegister) {
+        if (formData.password !== formData.confirmPassword) {
+          throw new Error('Las contraseñas no coinciden')
+        }
+        result = await authService.signUp(formData.email, formData.password, {
+          name: formData.name
+        })
+      } else {
+        result = await authService.signIn(formData.email, formData.password)
+      }
+
+      if (result.success) {
+        const userData = {
+          id: result.data.user.id,
+          name: result.data.user.user_metadata?.name || formData.name || result.data.user.email,
+          email: result.data.user.email,
+          provider: 'email',
+          avatar: '👤'
+        }
+        onLogin(userData)
+      } else {
+        setAuthError(result.error)
+      }
+    } catch (error) {
+      setAuthError(error.message)
+      // Fallback a modo invitado si hay error
+      if (error.message.includes('Supabase no está configurado')) {
+        handleGuestLogin()
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSocialLogin = async (provider) => {
+    setIsLoading(true)
+    setAuthError('')
+
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase no está configurado. Usando modo invitado.')
+      }
+
+      let result
+      if (provider === 'google') {
+        result = await authService.signInWithGoogle()
+      }
+
+      if (result && result.success) {
+        // La redirección manejará el login
+      } else {
+        throw new Error('Error en autenticación social')
+      }
+    } catch (error) {
+      setAuthError(error.message)
+      // Fallback a modo invitado
+      handleGuestLogin()
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleGuestLogin = () => {
+    setIsLoading(true)
+    
+    setTimeout(() => {
+      const userData = {
+        id: 'guest-' + Date.now(),
+        name: 'Invitado',
+        provider: 'guest',
+        avatar: '👤'
+      }
+      
+      onLogin(userData)
+      setIsLoading(false)
+    }, 1000)
+  }
 
   const handleLogin = async (provider) => {
-    setIsLoading(true)
-    // Simular login (en producción aquí iría la integración real)
-    setTimeout(() => {
-      onLogin({
-        id: '1',
-        name: 'Usuario',
-        email: 'usuario@ejemplo.com',
-        provider
-      })
-      setIsLoading(false)
-    }, 1500)
+    if (provider === 'guest') {
+      handleGuestLogin()
+    } else {
+      await handleSocialLogin(provider)
+    }
   }
 
   // Carrusel automático
@@ -28,25 +138,32 @@ const Login = ({ onLogin }) => {
     return () => clearInterval(interval)
   }, [])
 
-  const carouselCovers = [
-    { id: 1, title: 'The Legend of Zelda', color: '#DAA520', type: 'game' },
-    { id: 2, title: 'Your Name', color: '#87CEEB', type: 'movie' },
-    { id: 3, title: 'Silent Hill 2', color: '#2F4F2F', type: 'game' },
-    { id: 4, title: 'Daft Punk', color: '#FFD700', type: 'music' },
-    { id: 5, title: 'Spirited Away', color: '#98FB98', type: 'movie' },
-    { id: 6, title: 'GRIS', color: '#DDA0DD', type: 'game' },
-    { id: 7, title: 'Bon Iver', color: '#F0E68C', type: 'music' },
-    { id: 8, title: 'Green Day', color: '#32CD32', type: 'music' },
-    { id: 9, title: 'Interstellar', color: '#191970', type: 'movie' },
-    { id: 10, title: 'Cyberpunk 2077', color: '#FFFF00', type: 'game' },
-    { id: 11, title: 'The Beatles', color: '#FF6347', type: 'music' },
-    { id: 12, title: 'Avatar', color: '#00CED1', type: 'movie' },
-    // Duplicamos para efecto infinito
-    { id: 13, title: 'The Legend of Zelda', color: '#DAA520', type: 'game' },
-    { id: 14, title: 'Your Name', color: '#87CEEB', type: 'movie' },
-    { id: 15, title: 'Silent Hill 2', color: '#2F4F2F', type: 'game' },
-    { id: 16, title: 'Daft Punk', color: '#FFD700', type: 'music' }
-  ]
+  // Cargar portadas reales del contenido
+  const loadCarouselCovers = async () => {
+    try {
+      const covers = await contentImageService.getMixedCovers(10, 10, 10)
+      // Duplicar para efecto infinito
+      const duplicatedCovers = [...covers, ...covers]
+      setCarouselCovers(duplicatedCovers)
+    } catch (error) {
+      console.error('Error al cargar portadas:', error)
+      // Fallback a datos estáticos si falla
+      const fallbackCovers = [
+        { id: 1, title: 'Cyberpunk 2077', type: 'game', color: '#ff0080', icon: '🎮' },
+        { id: 2, title: 'Dune', type: 'movie', color: '#ff6b35', icon: '🎬' },
+        { id: 3, title: 'The Weeknd', type: 'music', color: '#7209b7', icon: '🎵' },
+        { id: 4, title: 'Elden Ring', type: 'game', color: '#f72585', icon: '🎮' },
+        { id: 5, title: 'Spider-Man', type: 'movie', color: '#4361ee', icon: '🎬' },
+        { id: 6, title: 'Bad Bunny', type: 'music', color: '#f77f00', icon: '🎵' }
+      ]
+      setCarouselCovers([...fallbackCovers, ...fallbackCovers])
+    }
+  }
+
+  // Cargar portadas al montar el componente
+  useEffect(() => {
+    loadCarouselCovers()
+  }, [])
 
   const floatingCovers = [
     { id: 1, type: 'game', title: 'Silent Hill 2', image: '🎮', color: '#8b5cf6' },
@@ -81,14 +198,50 @@ const Login = ({ onLogin }) => {
                initial={{ opacity: 0, scale: 0.8 }}
                animate={{ opacity: 1, scale: 1 }}
                transition={{ delay: index * 0.1, duration: 0.5 }}
-               style={{ background: `linear-gradient(135deg, ${cover.color}, ${cover.color}88)` }}
+               whileHover={{ scale: 1.05 }}
              >
-               <div className="cover-content">
-                 <div className="cover-icon">
-                   {cover.type === 'game' ? '🎮' : cover.type === 'movie' ? '🎬' : '🎵'}
+               {cover.image ? (
+                 <div className="cover-image-container">
+                   <img 
+                     src={cover.image} 
+                     alt={cover.title}
+                     className="cover-image"
+                     onError={(e) => {
+                       e.target.style.display = 'none'
+                       e.target.nextSibling.style.display = 'flex'
+                     }}
+                   />
+                   <div 
+                     className="cover-fallback"
+                     style={{
+                       background: `linear-gradient(135deg, ${cover.color || '#667eea'}, ${cover.color || '#667eea'}88)`,
+                       display: 'none'
+                     }}
+                   >
+                     <div className="cover-icon">
+                       {cover.type === 'game' ? '🎮' : cover.type === 'movie' ? '🎬' : cover.type === 'series' ? '📺' : '🎵'}
+                     </div>
+                     <div className="cover-title">{cover.title}</div>
+                   </div>
+                   <div className="cover-overlay">
+                     <span className="cover-type">
+                       {cover.type === 'game' ? 'Juego' : cover.type === 'movie' ? 'Película' : cover.type === 'series' ? 'Serie' : 'Música'}
+                     </span>
+                   </div>
                  </div>
-                 <div className="cover-title">{cover.title}</div>
-               </div>
+               ) : (
+                 <div 
+                   className="cover-content"
+                   style={{
+                     background: `linear-gradient(135deg, ${cover.color || '#667eea'}, ${cover.color || '#667eea'}88)`
+                   }}
+                 >
+                   <div className="cover-icon">
+                     {cover.type === 'game' ? '🎮' : cover.type === 'movie' ? '🎬' : '🎵'}
+                   </div>
+                   <div className="cover-title">{cover.title}</div>
+                 </div>
+               )}
                <div className="cover-overlay">
                  <span className="cover-type">{cover.type}</span>
                </div>
@@ -153,51 +306,179 @@ const Login = ({ onLogin }) => {
             </p>
           </motion.div>
 
+          {/* Mostrar error de autenticación */}
+          {authError && (
+            <motion.div 
+              className="auth-error"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              {authError}
+            </motion.div>
+          )}
+
+          {/* Formulario de email/contraseña */}
+          {showEmailLogin && (
+            <motion.form 
+              className="email-form"
+              onSubmit={handleEmailAuth}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              {showRegister && (
+                <div className="form-group">
+                  <User size={20} className="form-icon" />
+                  <input
+                    type="text"
+                    name="name"
+                    placeholder="Nombre completo"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+              )}
+              
+              <div className="form-group">
+                <Mail size={20} className="form-icon" />
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="Correo electrónico"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              
+              <div className="form-group">
+                <Lock size={20} className="form-icon" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  placeholder="Contraseña"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+              
+              {showRegister && (
+                <div className="form-group">
+                  <Lock size={20} className="form-icon" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="confirmPassword"
+                    placeholder="Confirmar contraseña"
+                    value={formData.confirmPassword}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+              )}
+              
+              <motion.button 
+                type="submit"
+                className="login-btn email-submit"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                disabled={isLoading}
+              >
+                <LogIn size={20} />
+                {showRegister ? 'Crear cuenta' : 'Iniciar sesión'}
+              </motion.button>
+              
+              <button
+                type="button"
+                className="toggle-form"
+                onClick={() => setShowRegister(!showRegister)}
+              >
+                {showRegister ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
+              </button>
+            </motion.form>
+          )}
+
           <motion.div 
             className="login-buttons"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.8, duration: 0.5 }}
           >
-            <button 
-              className="login-btn google-btn"
-              onClick={() => handleLogin('google')}
-              disabled={isLoading}
-            >
-              <div className="btn-icon">🔍</div>
-              <span>Continuar con Google</span>
-            </button>
+            {!showEmailLogin && (
+              <>
+                <motion.button 
+                  className="login-btn email"
+                  onClick={() => setShowEmailLogin(true)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Mail size={20} />
+                  Continuar con Email
+                </motion.button>
 
-            <button 
-              className="login-btn apple-btn"
-              onClick={() => handleLogin('apple')}
-              disabled={isLoading}
-            >
-              <div className="btn-icon">🍎</div>
-              <span>Continuar con Apple</span>
-            </button>
+                <div className="divider">
+                  <span>o</span>
+                </div>
+              </>
+            )}
 
-            <button 
-              className="login-btn instagram-btn"
-              onClick={() => handleLogin('instagram')}
-              disabled={isLoading}
-            >
-              <div className="btn-icon">📷</div>
-              <span>Continuar con Instagram</span>
-            </button>
+            {isSupabaseConfigured && (
+              <motion.button 
+                className="login-btn google"
+                onClick={() => handleLogin('google')}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Continuar con Google
+              </motion.button>
+            )}
+
+            {showEmailLogin && (
+              <button
+                className="back-btn"
+                onClick={() => {
+                  setShowEmailLogin(false)
+                  setShowRegister(false)
+                  setAuthError('')
+                }}
+              >
+                ← Volver
+              </button>
+            )}
 
             <div className="divider">
               <span>o</span>
             </div>
 
-            <button 
-              className="login-btn guest-btn"
+            <motion.button 
+              className="login-btn guest"
               onClick={() => handleLogin('guest')}
-              disabled={isLoading}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
               <User size={20} />
-              <span>Continuar como invitado</span>
-            </button>
+              Continuar como invitado
+            </motion.button>
+
+            {!isSupabaseConfigured && (
+              <div className="config-notice">
+                <small>💡 Configura Supabase para autenticación completa</small>
+              </div>
+            )}
           </motion.div>
 
           {isLoading && (
@@ -259,6 +540,39 @@ const Login = ({ onLogin }) => {
 
         .carousel-item:hover {
           transform: scale(1.05) translateY(-5px);
+        }
+
+        .cover-image-container {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        .cover-image {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          border-radius: 12px;
+          transition: transform 0.3s ease;
+        }
+
+        .cover-image:hover {
+          transform: scale(1.1);
+        }
+
+        .cover-fallback {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          height: 100%;
+          padding: 10px;
+          border-radius: 12px;
+          color: white;
+          text-align: center;
         }
 
         .cover-content {
@@ -383,6 +697,116 @@ const Login = ({ onLogin }) => {
           gap: 1rem;
         }
 
+        .auth-error {
+          background: rgba(239, 68, 68, 0.1);
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          color: #ef4444;
+          padding: 12px;
+          border-radius: 8px;
+          margin-bottom: 16px;
+          font-size: 0.9rem;
+          text-align: center;
+        }
+
+        .email-form {
+          width: 100%;
+          margin-bottom: 20px;
+        }
+
+        .form-group {
+          position: relative;
+          margin-bottom: 16px;
+        }
+
+        .form-icon {
+          position: absolute;
+          left: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: rgba(255, 255, 255, 0.6);
+          z-index: 1;
+        }
+
+        .form-group input {
+          width: 100%;
+          padding: 16px 16px 16px 48px;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 12px;
+          color: white;
+          font-size: 1rem;
+          transition: all 0.3s ease;
+        }
+
+        .form-group input::placeholder {
+          color: rgba(255, 255, 255, 0.6);
+        }
+
+        .form-group input:focus {
+          outline: none;
+          border-color: rgba(255, 255, 255, 0.4);
+          background: rgba(255, 255, 255, 0.15);
+        }
+
+        .password-toggle {
+          position: absolute;
+          right: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          color: rgba(255, 255, 255, 0.6);
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          transition: color 0.3s ease;
+        }
+
+        .password-toggle:hover {
+          color: white;
+        }
+
+        .toggle-form {
+          background: none;
+          border: none;
+          color: rgba(255, 255, 255, 0.8);
+          font-size: 0.9rem;
+          cursor: pointer;
+          margin-top: 12px;
+          text-decoration: underline;
+          transition: color 0.3s ease;
+        }
+
+        .toggle-form:hover {
+          color: white;
+        }
+
+        .back-btn {
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          color: white;
+          padding: 12px 20px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          margin-bottom: 12px;
+          transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+          background: rgba(255, 255, 255, 0.15);
+        }
+
+        .config-notice {
+          text-align: center;
+          margin-top: 16px;
+          padding: 12px;
+          background: rgba(255, 193, 7, 0.1);
+          border: 1px solid rgba(255, 193, 7, 0.3);
+          border-radius: 8px;
+          color: #ffc107;
+        }
+
         .login-btn {
           display: flex;
           align-items: center;
@@ -404,25 +828,51 @@ const Login = ({ onLogin }) => {
           cursor: not-allowed;
         }
 
-        .google-btn {
-          background: linear-gradient(45deg, #4285f4, #34a853);
+        .login-btn.email {
+          background: rgba(59, 130, 246, 0.8);
           color: white;
+          backdrop-filter: blur(10px);
         }
 
-        .apple-btn {
-          background: linear-gradient(45deg, #000, #333);
-          color: white;
+        .login-btn.email:hover {
+          background: rgba(59, 130, 246, 0.9);
+          transform: translateY(-2px);
         }
 
-        .instagram-btn {
-          background: linear-gradient(45deg, #e4405f, #f77737);
+        .login-btn.email-submit {
+          background: rgba(34, 197, 94, 0.8);
           color: white;
+          backdrop-filter: blur(10px);
         }
 
-        .guest-btn {
+        .login-btn.email-submit:hover {
+          background: rgba(34, 197, 94, 0.9);
+          transform: translateY(-2px);
+        }
+
+        .login-btn.google {
+          background: rgba(255, 255, 255, 0.9);
+          color: #333;
+          backdrop-filter: blur(10px);
+        }
+
+        .login-btn.google:hover {
+          background: white;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .login-btn.guest {
           background: rgba(255, 255, 255, 0.1);
           color: white;
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          border: 2px solid rgba(255, 255, 255, 0.2);
+          backdrop-filter: blur(10px);
+        }
+
+        .login-btn.guest:hover {
+          background: rgba(255, 255, 255, 0.2);
+          border-color: rgba(255, 255, 255, 0.4);
+          transform: translateY(-2px);
         }
 
         .login-btn:hover:not(:disabled) {

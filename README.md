@@ -2,6 +2,39 @@
 
 Una aplicación de recomendaciones multimedia inteligente que sugiere juegos, películas y música basándose en tu estado emocional.
 
+## ✨ Funcionalidades
+
+### 🎯 **Recomendaciones Inteligentes**
+- 🎭 **Selección de Personaje**: Elige tu avatar personalizado
+- 🧠 **Análisis Emocional**: Recomendaciones basadas en tu estado de ánimo
+- 🎮 **Videojuegos**: Descubre nuevos juegos según tu mood
+- 🎬 **Películas y Series**: Encuentra tu próximo contenido favorito
+- 🎵 **Música**: Explora nuevos artistas y álbumes
+- 🔄 **Re-roll**: Cambia cualquier recomendación al instante
+
+### 🔐 **Sistema de Autenticación**
+- 📧 **Email/Contraseña**: Registro e inicio de sesión tradicional
+- 🔍 **Google OAuth**: Autenticación social con Google
+- 👤 **Modo Invitado**: Acceso sin registro
+- 💾 **Persistencia**: Guarda tus preferencias y historial
+
+### 🎪 **Carrusel de Portadas**
+- 🖼️ **Imágenes Reales**: Portadas de películas, juegos y música
+- 🔄 **Auto-scroll**: Animación continua e infinita
+- 📱 **Responsive**: Adaptado a todos los tamaños de pantalla
+
+### 💾 **Gestión de Datos**
+- 📊 **Historial**: Registro de todas tus recomendaciones
+- ⭐ **Favoritos**: Guarda tu contenido preferido
+- 🎛️ **Preferencias**: Personaliza tu experiencia
+- 🔄 **Sincronización**: Datos guardados en la nube
+
+### 🎨 **Experiencia de Usuario**
+- 📱 **Responsive**: Diseño adaptado a todos los dispositivos
+- 🎨 **Interfaz Moderna**: Efectos glassmorphism y animaciones fluidas
+- 🌟 **Animaciones**: Transiciones suaves con Framer Motion
+- 🎯 **UX Optimizada**: Navegación intuitiva y accesible
+
 ## 🎯 Características Principales (Fase 1 - MVP)
 
 ### ✅ Funcionalidades Implementadas
@@ -75,9 +108,9 @@ npm run dev
 npm run build
 ```
 
-### 🔑 Configuración de APIs (Recomendado)
+### 🔑 Configuración de APIs y Autenticación (Recomendado)
 
-Para obtener contenido real en lugar de datos de ejemplo:
+Para obtener contenido real y habilitar autenticación:
 
 1. **Copia el archivo de configuración:**
    ```bash
@@ -88,12 +121,18 @@ Para obtener contenido real en lugar de datos de ejemplo:
    - [TMDB](https://www.themoviedb.org/settings/api) - Para películas y series
    - [RAWG](https://rawg.io/apidocs) - Para videojuegos
    - [Last.fm](https://www.last.fm/api/account/create) - Para música
+   - [Supabase](https://supabase.com) - Para autenticación y base de datos
 
 3. **Completa el archivo `.env`:**
    ```env
+   # APIs de Contenido
    VITE_TMDB_API_KEY=tu_api_key_tmdb
    VITE_RAWG_API_KEY=tu_api_key_rawg
    VITE_LASTFM_API_KEY=tu_api_key_lastfm
+   
+   # Supabase (Autenticación y Base de Datos)
+   VITE_SUPABASE_URL=tu_supabase_url
+   VITE_SUPABASE_ANON_KEY=tu_supabase_anon_key
    ```
 
 4. **Reinicia el servidor:**
@@ -101,7 +140,9 @@ Para obtener contenido real en lugar de datos de ejemplo:
    npm run dev
    ```
 
-📖 **Guía detallada:** Ver [API_SETUP.md](./API_SETUP.md) para instrucciones completas.
+📖 **Guías detalladas:**
+- APIs de Contenido: [API_SETUP.md](./API_SETUP.md)
+- Supabase (Autenticación): [SUPABASE_SETUP.md](./SUPABASE_SETUP.md)
 
 **Nota:** La aplicación funciona perfectamente sin APIs configuradas, usando datos de ejemplo de alta calidad.
 
